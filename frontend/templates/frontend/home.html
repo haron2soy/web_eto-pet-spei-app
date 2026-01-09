@@ -1,0 +1,145 @@
+{% load dict_extras %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Climate Data Processing Portal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        body {
+            font-family: "Segoe UI", Roboto, Arial, sans-serif;
+            background: #f4f6f8;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 60px auto;
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+        }
+
+        h1 { color: #1f2937; }
+        p { color: #4b5563; }
+
+        .upload-box {
+            border: 2px dashed #cbd5e1;
+            padding: 30px;
+            border-radius: 6px;
+            background: #f9fafb;
+            text-align: center;
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .messages div {
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+
+        .error { background: #fee2e2; color: #991b1b; }
+        .success { background: #dcfce7; color: #166534; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 30px;
+            font-size: 14px;
+        }
+
+        th, td {
+            border: 1px solid #e5e7eb;
+            padding: 8px;
+        }
+
+        th {
+            background: #f1f5f9;
+            text-align: left;
+        }
+
+        .next-step {
+            margin-top: 30px;
+            text-align: right;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+
+    <h1>Climate Data Processing Portal</h1>
+    <p>
+        Upload station-based climate CSV or Excel files.
+        Data will be validated, combined, and previewed before computing
+        ETo, PET, and SPEI.
+    </p>
+
+    <form action="{% url 'upload' %}" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="upload-box">
+            <input type="file" name="files" multiple accept=".csv,.xlsx,.xls" required>
+            <br>
+            <button type="submit">Upload Climate Files</button>
+        </div>
+    </form>
+
+    <div class="messages">
+        {% for message in messages %}
+            <div class="{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    
+    {% if undetected_columns %}
+        <h4>Undetected Columns (not used in computation)</h4>
+        <ul>
+            {% for col in undetected_columns %}
+                <li>{{ col }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if preview_rows %}
+        <h3>Combined Data Preview (first 100 rows)</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    {% for col in preview_cols %}
+                        <th>{{ col }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in preview_rows %}
+                    <tr>
+                        {% for col in preview_cols %}
+                            <td>{{ row|get_item:col }}</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="next-step">
+            <button disabled>Compute ETo / PET / SPEI (Next)</button>
+        </div>
+    {% endif %}
+
+</div>
+</body>
+</html>

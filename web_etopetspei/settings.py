@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'eto_pet_spei_app',
     'rest_framework',
     'frontend',
+    'requests',
 ]
 
 MIDDLEWARE = [

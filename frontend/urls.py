@@ -1,7 +1,7 @@
 from django.urls import path
-from .views import HomeView, UploadClimateCSVFrontendView
+from .views import HomeView, UploadClimateFilesView
 
 urlpatterns = [
     path("", HomeView.as_view(), name="home"),
-    path("upload/", UploadClimateCSVFrontendView.as_view(), name="upload"),
+    path("upload/", UploadClimateFilesView.as_view(), name="upload"),
 ]
