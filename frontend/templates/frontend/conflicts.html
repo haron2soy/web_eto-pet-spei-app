@@ -1,0 +1,66 @@
+{% extends "frontend/home.html" %}
+
+{% block content %}
+<div class="conflicts-container" style="margin-top: 30px; padding: 20px; border: 1px solid #fbbf24; background: #fef3c7; border-radius: 8px;">
+    <h3 style="color:#92400e;">Duplicate variable conflicts detected:</h3>
+    <form id="conflicts-form">
+        <ul style="list-style: none; padding-left: 0;">
+        {% for conflict in conflicts_metadata %}
+            <li style="margin-bottom: 15px;">
+                <strong>{{ conflict.variable }}</strong> appears in files:
+                <ul>
+                {% for file_index in conflict.files %}
+                    <li>
+                        <label>
+                            <input type="radio" 
+                                   name="select_{{ conflict.variable }}" 
+                                   value="{{ file_index }}" 
+                                   {% if file_index == conflict.selected %}checked{% endif %}>
+                            File {{ file_index }} ({{ conflict.counts|dict_get:file_index }} rows with data)
+                            {% if file_index == conflict.selected %}<em>(auto-selected)</em>{% endif %}
+                        </label>
+                    </li>
+                {% endfor %}
+                </ul>
+            </li>
+        {% endfor %}
+        </ul>
+        <button type="button" onclick="applyConflictSelections()" style="padding:8px 16px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer;">
+            Apply Selections
+        </button>
+    </form>
+</div>
+
+<script>
+function applyConflictSelections() {
+    const selections = {};
+    const form = document.getElementById('conflicts-form');
+    const inputs = form.querySelectorAll('input[type="radio"]:checked');
+
+    inputs.forEach(input => {
+        const variable = input.name.replace('select_', '');
+        const fileIndex = parseInt(input.value);
+        selections[variable] = fileIndex;
+    });
+
+    fetch("{% url 'apply_conflict_selections' %}", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": "{{ csrf_token }}"
+        },
+        body: JSON.stringify({ selections })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if(data.success) {
+            alert("Selections applied successfully. Preview updated.");
+            location.reload();
+        } else {
+            alert("Error applying selections: " + data.error);
+        }
+    })
+    .catch(err => alert("Request failed: " + err));
+}
+</script>
+{% endblock %}

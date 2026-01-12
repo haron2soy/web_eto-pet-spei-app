@@ -77,10 +77,30 @@ def apply_column_mappings(df: pd.DataFrame):
 
     return df
 
+'''def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    df.columns = [c.strip().lower() for c in df.columns]
+    return df'''
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = [c.strip().lower() for c in df.columns]
-    return df
 
+    if "station_name" in df.columns:
+        df["station_name"] = (
+            df["station_name"]
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
+
+    return df
+def collect_missing_stationids(dfs, station_map):
+    all_stations = set()
+
+    for df in dfs:
+        all_stations.update(df["station_name"].dropna().unique())
+
+    missing = sorted(all_stations - set(station_map.keys()))
+    return missing
+    
 def validate_minimum_schema(df: pd.DataFrame):
     cols = set(df.columns)
 
@@ -107,8 +127,11 @@ def get_preview_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
 def extract_stationid_map(dfs):
     station_map = {}
+    all_stations = set()
 
     for df in dfs:
+        all_stations.update(df["station_name"].dropna().unique())
+
         if "stationid" not in df.columns:
             continue
 
@@ -123,8 +146,11 @@ def extract_stationid_map(dfs):
 
             station_map[st] = sid
 
-    return station_map
-def merge_climate_dataframes(dfs):
+    missing_stations = sorted(all_stations - set(station_map.keys()))
+
+    return station_map, missing_stations
+
+'''def merge_climate_dataframes(dfs):
     merged_df = None
     key_cols = ["station_name", "year", "month"]
 
@@ -148,24 +174,73 @@ def merge_climate_dataframes(dfs):
                 how="outer"
             )
 
+    return merged_df'''
+
+def merge_climate_dataframes(dfs, selected_columns=None):
+    """
+    selected_columns: dict[var_name] = file_index
+    """
+    merged_df = None
+    key_cols = ["station_name", "year", "month"]
+
+    for i, df in enumerate(dfs):
+        df = df.drop(columns=["stationid"], errors="ignore")
+
+        # Keep only canonical variables, but if variable is a duplicate, keep it only if this file is selected
+        keep_cols = key_cols[:]
+        for col in df.columns:
+            if col in key_cols:
+                continue
+            if col in CANONICAL_COLUMNS:
+                if selected_columns and col in selected_columns:
+                    if selected_columns[col] != i:
+                        continue  # skip this duplicate column
+                keep_cols.append(col)
+
+        df = df[keep_cols]
+
+        if merged_df is None:
+            merged_df = df
+        else:
+            for col in df.columns:
+                if col in key_cols:
+                    continue
+                if col in merged_df.columns:
+                    merged_df[col] = merged_df[col].combine_first(df[col])
+                else:
+                    merged_df[col] = df[col]
+
     return merged_df
+
 
 def attach_stationid(df, station_map):
     df["stationid"] = df["station_name"].map(station_map)
     return df
 
+def resolve_duplicates_by_data_count(dfs, duplicates):
+    """
+    For each duplicate variable, select the file with the most non-NaN rows.
+    Returns:
+        selected_columns: dict[var_name] = selected file index
+        conflicts_metadata: list of info for frontend
+    """
+    selected_columns = {}
+    conflicts_metadata = []
 
-    '''def validate_minimum_schema(df: pd.DataFrame):
-    cols = set(df.columns)
+    for var, file_indices in duplicates.items():
+        counts = [(i, dfs[i][var].notna().sum()) for i in file_indices]
+        counts.sort(key=lambda x: x[1], reverse=True)  # more non-NaN first
 
-    if not any(c in cols for c in STATION_COLS):
-        raise ValueError("Missing station name column")
+        best_file_index = counts[0][0]
+        selected_columns[var] = best_file_index
 
-    if not all(c in cols for c in REQUIRED_TIME_COLS):
-        raise ValueError("Year and Month columns are required")
+        # store metadata for frontend
+        conflict_info = {
+            "variable": var,
+            "files": file_indices,
+            "counts": {i: dfs[i][var].notna().sum() for i in file_indices},
+            "selected": best_file_index
+        }
+        conflicts_metadata.append(conflict_info)
 
-    climate_vars = cols - set(REQUIRED_TIME_COLS) - set(STATION_COLS) - {"stationid"}
-    if len(climate_vars) == 0:
-        raise ValueError("At least one climate variable is required")
-
-    return True'''
+    return selected_columns, conflicts_metadata

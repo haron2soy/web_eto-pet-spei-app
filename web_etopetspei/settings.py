@@ -118,7 +118,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -140,3 +140,10 @@ MEDIA_URL = "/media/"
 
 # Cache directory for PipelineManager
 CLIMATE_CACHE_DIR = os.path.join(MEDIA_ROOT, "cache")
+
+STATICFILES_DIRS = [
+    BASE_DIR / "static",  # root-level static folder
+  ]
+
+# For production
+STATIC_ROOT = BASE_DIR / "staticfiles"

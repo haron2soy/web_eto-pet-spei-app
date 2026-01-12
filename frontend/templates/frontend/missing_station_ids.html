@@ -1,0 +1,29 @@
+<div class="card sticky-top">
+  <div class="card-header bg-warning">
+    <strong>Missing Station IDs</strong>
+  </div>
+
+  <div class="card-body">
+    <form method="post" action="{% url 'save_station_ids' %}">
+      {% csrf_token %}
+
+      {% for station in missing_stationids %}
+        <div class="mb-3">
+          <label class="form-label">{{ station }}</label>
+          <input type="hidden" name="stationname_{{ forloop.counter }}" value="{{ station }}">
+          <input
+            type="text"
+            class="form-control"
+            name="stationid_{{ forloop.counter }}"
+            placeholder="Enter Station ID"
+            required
+          >
+        </div>
+      {% endfor %}
+
+      <button type="submit" class="btn btn-primary w-100">
+        Save Station IDs
+      </button>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,12 @@
+{% extends "frontend/home.html" %}
+
+{% block forms %}
+<form action="{% url 'upload' %}" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="upload-box">
+        <input type="file" name="files" multiple accept=".csv,.xlsx,.xls" required>
+        <br>
+        <button type="submit">Upload Climate Files</button>
+    </div>
+</form>
+{% endblock %}

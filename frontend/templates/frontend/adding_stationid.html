@@ -1,0 +1,28 @@
+<div id="stationIdModal" style="display:none;">
+    <h3>Provide Station IDs</h3>
+
+    <form method="post" action="{% url 'save-station-ids' %}">
+        {% csrf_token %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Station Name</th>
+                    <th>Station ID</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for st in missing_stationids %}
+                <tr>
+                    <td>{{ st }}</td>
+                    <td>
+                        <input type="text" name="stationid_{{ forloop.counter }}" required>
+                        <input type="hidden" name="stationname_{{ forloop.counter }}" value="{{ st }}">
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <button type="submit">Save Station IDs</button>
+    </form>
+</div>
