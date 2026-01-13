@@ -136,8 +136,15 @@ def extract_stationid_map(dfs):
             continue
 
         for _, row in df[["station_name", "stationid"]].dropna().iterrows():
-            st = row["station_name"]
-            sid = row["stationid"]
+            #st = row["station_name"]
+            st = (
+                str(row["station_name"])
+                .strip()
+                .lower()
+            )
+            sid = str(row["stationid"]).strip()
+
+            #sid = row["stationid"]
 
             if st in station_map and station_map[st] != sid:
                 raise ValueError(
@@ -146,35 +153,14 @@ def extract_stationid_map(dfs):
 
             station_map[st] = sid
 
-    missing_stations = sorted(all_stations - set(station_map.keys()))
+    #missing_stations = sorted(all_stations - set(station_map.keys()))
+    missing_stations = sorted(
+        s for s in all_stations
+        if s not in station_map
+    )
 
     return station_map, missing_stations
 
-'''def merge_climate_dataframes(dfs):
-    merged_df = None
-    key_cols = ["station_name", "year", "month"]
-
-    for df in dfs:
-        df = df.drop(columns=["stationid"], errors="ignore")
-
-        keep_cols = key_cols + [
-            c for c in df.columns
-            if c in CANONICAL_COLUMNS and c not in key_cols
-        ]
-
-        df = df[keep_cols]
-
-        if merged_df is None:
-            merged_df = df
-        else:
-            merged_df = pd.merge(
-                merged_df,
-                df,
-                on=key_cols,
-                how="outer"
-            )
-
-    return merged_df'''
 
 def merge_climate_dataframes(dfs, selected_columns=None):
     """

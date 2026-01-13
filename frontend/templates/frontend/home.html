@@ -1,133 +1,221 @@
 {% load static %}
 {% load dict_extras %}
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Climate Data Processing Portal</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" type="text/css" href="{% static  'css/base.css' %}">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="{% static 'js/base.js' %}"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="{% static 'css/base.css' %}?v=20260113">
 </head>
+
 <body>
+    {% include 'frontend/header.html' %}
 <div class="container">
 
-    <h1>Climate Data Processing Portal</h1>
-    <p>
-        Upload station-based climate CSV or Excel files.
-        Data will be validated, combined, and previewed before computing
-        ETo, PET, and SPEI.
-    </p>
-    <div class="layout">
-    
-    <form action="{% url 'upload' %}" method="post" enctype="multipart/form-data">
-        {% csrf_token %}
-        <div class="upload-box">
-            <input type="file" name="files" multiple accept=".csv,.xlsx,.xls" required>
-            <br>
-            <button type="submit">Upload Climate Files</button>
-        </div>
-    </form>
+    <div class="main-content">
 
-    <div class="messages">
-        {% for message in messages %}
-            <div class="{{ message.tags }}">{{ message }}</div>
-        {% endfor %}
-    </div>
-    {% if undetected_columns %}
-        <h4>Undetected Columns (not used in computation)</h4>
-        <ul>
-            {% for col in undetected_columns %}
-                <li>{{ col }}</li>
-            {% endfor %}
-        </ul>
-    {% endif %}
-
-{% if preview_rows %}
-<h3>Combined Data Preview (first 100 rows)</h3>
-<table>
-    <thead>
-        <tr>
-            {% for col in preview_cols %}
-            <th>{{ col }}</th> 
-            {% endfor %} 
-        </tr> 
-    </thead> 
-    <tbody> 
-        {% for row in preview_rows %} 
-        <tr> 
-            {% for col in preview_cols %} 
-            <td>{{ row|get_item:col }}</td> 
-            {% endfor %} 
-        </tr> 
-        {% endfor %} 
-    </tbody> 
-</table> 
-<div class="next-step"> 
-    <button disabled>Compute ETo / PET / SPEI (Next)</button> 
-</div> 
-
-        <!-- RIGHT: Floating Station ID Form -->
-        {% if missing_stationids %}
-            <div class="missing-stationids-panel">
-                <h3>Missing Station IDs</h3>
-                <p>Please provide Station IDs to continue.</p>
-
-                <form method="post" action="{% url 'save_station_ids' %}">
-                    {% csrf_token %}
-
-                    {% for station in missing_stationids %}
-                        <div class="field">
-                            <label>{{ station }}</label>
-                            <input type="hidden"
-                                name="stationname_{{ forloop.counter }}"
-                                value="{{ station }}">
-                            <input type="text"
-                                name="stationid_{{ forloop.counter }}"
-                                required>
+        <!-- ================= MAIN COLUMN ================= -->
+        <div class="main-column">
+            {% if not preview_rows %}
+            <!-- Upload -->
+            <div class="card">
+                <div class="card-header">Upload Climate Data Files</div>
+                <div class="card-body">
+                    <form action="{% url 'upload' %}" method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <div class="upload-zone" id="dropZone">
+                            <div class="upload-icon">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </div>
+                            <p><strong>Click or drag & drop files</strong></p>
+                            <p class="lead">CSV / Excel · Multiple files allowed</p>
+                            <input type="file" name="files" id="fileInput" multiple required>
                         </div>
-                    {% endfor %}
 
-                    <button type="submit" style="width:100%">
-                        Save Station IDs
-                    </button>
-                </form>
+                        <div style="text-align:center; margin-top:2rem;">
+                            <button class="btn btn-primary" type="submit">
+                                Upload & Process
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
-        {% endif %}
+            {% endif %}
+
+            <!-- Messages -->
+            {% if messages %}
+            <div id="flash-messages">
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+</div>
+            {% endif %}
+
+            {% if preview_rows %}
+            <div class="card preview-card">
+
+                <div class="card-header">
+                    <h3>
+                        Combined Data Preview — first 500 rows
+                    </h3>
+
+                    <div class="preview-actions">
+                        <form method="post" action="{% url 'continue_to_computation' %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-primary">
+                                Continue
+                            </button>
+                        </form>
+
+                        <form method="post" action="{% url 'save_updated_data' %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-success">
+                                Save Updated Data
+                            </button>
+                        </form>
+                    </div
+                </div>
+
+                <div class="card-body">
+                    {% if undetected_columns %}
+                    <div class="message warning">
+                        <strong>Warning:</strong>
+                        {{ undetected_columns|join:", " }}
+                    </div>
+                    {% endif %}
+
+                    {% if missing_stationids %}
+                    <div class="preview-sidebar draggable" id="stationPanel">
+
+                        <div class="sidebar-header drag-handle">
+                            Missing Station IDs
+                            <button type="button"
+                                    class="sidebar-close"
+                                    onclick="this.closest('.preview-sidebar').style.display='none'">
+                                ✕
+                            </button>
+                        </div>
+
+                        <div class="sidebar-body">
+                            <form method="post" action="{% url 'save_station_ids' %}">
+                                {% csrf_token %}
+
+                                <div class="station-form-grid">
+                                    {% for station in missing_stationids %}
+                                    <div class="form-group">
+                                        <label>{{ station }}</label>
+                                        <input type="hidden"
+                                            name="stationname_{{ forloop.counter }}"
+                                            value="{{ station }}">
+                                        <input type="text"
+                                            name="stationid_{{ forloop.counter }}"
+                                            placeholder="e.g. KE-NRB-001"
+                                            required>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+
+                                <button class="btn btn-primary" style="margin-top:1.25rem;">
+                                    Save & Continue
+                                </button>
+                            </form>
+                        </div>
+
+                    </div>
+                    {% endif %}
+
+                    <div class="preview-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    {% for col in preview_cols %}
+                                    <th>{{ col }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in preview_rows %}
+                                <tr>
+                                    {% for col in preview_cols %}
+                                    <td>{{ row|get_item:col|default:"—" }}</td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
+            </div>
+            {% endif %}
+
+       </div>
+
+        
 
     </div>
-{% endif %}
-
-    <!-- {% if missing_stationids %}
-<div class="sidebar">
-    <h3>Missing Station IDs</h3>
-    <p>Please provide Station IDs to proceed.</p>
-
-    <form method="post" action="{% url 'save_station_ids' %}">
-        {% csrf_token %}
-
-        {% for station in missing_stationids %}
-            <div style="margin-bottom: 12px;">
-                <label><strong>{{ station }}</strong></label>
-                <input type="hidden"
-                       name="stationname_{{ forloop.counter }}"
-                       value="{{ station }}">
-
-                <input type="text"
-                       name="stationid_{{ forloop.counter }}"
-                       placeholder="Enter Station ID"
-                       required
-                       style="width:100%; padding:8px; margin-top:4px;">
-            </div>
-        {% endfor %}
-
-        <button type="submit" style="width:100%;">
-            Save Station IDs
-        </button>
-    </form>
 </div>
-{% endif %}-->
 
-          </div>
-        </div>
-    </body>
+<script>
+const dz = document.getElementById('dropZone');
+const fi = document.getElementById('fileInput');
+
+dz?.addEventListener('click', () => fi.click());
+dz?.addEventListener('dragover', e => {
+    e.preventDefault(); dz.classList.add('dragover');
+});
+dz?.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+dz?.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('dragover');
+    fi.files = e.dataTransfer.files;
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+    const messages = document.querySelectorAll("#flash-messages .alert");
+
+    messages.forEach((msg) => {
+        // fade out after 3 seconds
+        setTimeout(() => {
+            msg.style.transition = "opacity 0.5s ease";
+            msg.style.opacity = "0";
+
+            // remove from DOM after fade
+            setTimeout(() => {
+                msg.remove();
+            }, 500);
+        }, 3000);
+    });
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+    const messages = document.querySelectorAll(
+        "#flash-messages .alert, .message.warning"
+    );
+
+    messages.forEach((msg) => {
+        setTimeout(() => {
+            msg.style.transition = "opacity 0.5s ease";
+            msg.style.opacity = "0";
+
+            setTimeout(() => {
+                msg.remove();
+            }, 500);
+        }, 3000);
+    });
+});
+
+</script>
+{% include 'frontend/footer.html' %}
+</body>
 </html>

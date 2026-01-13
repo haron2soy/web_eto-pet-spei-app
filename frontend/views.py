@@ -6,6 +6,7 @@ from django.contrib import messages
 import pandas as pd
 from django.shortcuts import redirect
 from django.views.decorators.http import require_POST
+from django.http import HttpResponse
 
 from climate_core.utils.upload_utils import (
     CANONICAL_COLUMNS,
@@ -22,14 +23,30 @@ from climate_core.utils.upload_utils import (
        
 )
 
-
 class HomeView(View):
     template_name = "frontend/home.html"
 
     def get(self, request):
-        return render(request, self.template_name)
+        if not request.session.get("has_active_preview"):
+            # Fresh visit → clean state
+            for key in [
+                "climate_preview",
+                "climate_columns",
+                "missing_stationids",
+                "undetected_columns",
+                "station_map",
+            ]:
+                request.session.pop(key, None)
 
+        context = {
+            "preview_rows": request.session.get("climate_preview"),
+            "preview_cols": request.session.get("climate_columns"),
+            "missing_stationids": request.session.get("missing_stationids"),
+            "undetected_columns": request.session.get("undetected_columns"),
+        }
+        return render(request, self.template_name, context)
 
+  
 class UploadClimateFilesView(View):
     template_name = "frontend/home.html"
 
@@ -66,6 +83,7 @@ class UploadClimateFilesView(View):
             #validate_station_coverage(dfs, station_map)
             merged_df = merge_climate_dataframes(dfs, selected_columns)
             merged_df = attach_stationid(merged_df, station_map)
+            request.session["merged_df"] = merged_df.to_json(orient="records")
             merged_df.attrs["missing_stationids"] = missing_stations
             merged_df.attrs["undetected_columns"] = sorted(all_undetected)
         
@@ -77,6 +95,8 @@ class UploadClimateFilesView(View):
                 }
             request.session["climate_preview"] = preview_df.to_dict("records")
             request.session["climate_columns"] = list(preview_df.columns)
+            request.session["has_active_preview"] = True
+
             request.session["undetected_columns"] = merged_df.attrs.get(
             "undetected_columns", []
             )
@@ -92,23 +112,33 @@ class UploadClimateFilesView(View):
         )
         
         if missing_stations:
-            '''return render(
-                request,
-                "frontend/missing_station_ids.html",
-                {
-                    "missing_stationids": missing_stations
-                }
-            )'''
+    
             return render(
                 request,
                 self.template_name,
-                {
-                    "preview_rows": request.session["climate_preview"],
-                    "preview_cols": request.session["climate_columns"],
-                    "missing_stationids": missing_stations, 
+                    {
+                    "preview_rows": preview_df.to_dict("records"),
+                    "preview_cols": list(preview_df.columns),
+                    "missing_stationids": missing_stations,
+                    "undetected_columns": merged_df.attrs.get("undetected_columns", []),
                 }
-            )
+              
+                )
 
+
+class ResetHomeView(View):
+    def get(self, request):
+        for key in [
+            "climate_preview",
+            "climate_columns",
+            "missing_stationids",
+            "undetected_columns",
+            "station_map",
+        ]:
+            request.session.pop(key, None)
+
+        request.session.pop("has_active_preview", None)
+        return redirect("home")
 
 
 class ConflictsView(TemplateView):
@@ -119,26 +149,17 @@ class ConflictsView(TemplateView):
         # Pass conflicts from session (set when files uploaded)
         context["conflicts_metadata"] = self.request.session.get("conflicts_metadata", [])
         return context
-'''class SaveStationIdsView(View):
-    def post(self, request):
-        station_map = request.session.get("station_map", {})
 
-        for key in request.POST:
-            if key.startswith("stationname_"):
-                idx = key.split("_")[1]
-                name = request.POST[key]
-                sid = request.POST.get(f"stationid_{idx}")
-
-                station_map[name] = sid
-
-        request.session["station_map"] = station_map
-        messages.success(request, "Station IDs saved successfully.")
-
-        return redirect("home")'''
 class SaveStationIdsView(View):
     def post(self, request):
         station_map = request.session.get("station_map", {})
+        preview_rows = request.session.get("climate_preview")
 
+        if not preview_rows:
+            messages.error(request, "Session expired. Please re-upload files.")
+            return redirect("reset_home")
+
+        # 1. Update station_map from form
         for key, value in request.POST.items():
             if key.startswith("stationname_"):
                 idx = key.split("_")[-1]
@@ -151,25 +172,120 @@ class SaveStationIdsView(View):
         request.session["station_map"] = station_map
         request.session["missing_stationids"] = []
 
-        messages.success(request, "Station IDs saved successfully.")
+        # 2. Apply station IDs directly to preview rows
+        for row in preview_rows:
+            station = row.get("station_name")
+            if station:
+                row["stationid"] = station_map.get(
+                    station.strip().lower()
+                )
+
+        # 3. Persist updated preview
+        request.session["climate_preview"] = preview_rows
+
+        messages.success(
+            request,
+            "Station IDs saved and applied successfully."
+        )
+        request.session["has_active_preview"] = True
         return redirect("home")
 
-'''class SaveStationIdsView(View):
+
+
+def normalize_station_name(value):
+    return (
+        str(value)
+        .strip()
+        .lower()
+        .replace("_", " ")
+    )
+
+class ContinueToComputationView(View):
     def post(self, request):
+        if not request.session.get("climate_preview"):
+            messages.warning(request, "No active preview.")
+            return redirect("home")
+
+        if request.session.get("missing_stationids"):
+            messages.warning(
+                request,
+                "Please resolve missing station IDs before continuing."
+            )
+            return redirect("home")
+
+        # Lock preview state
+        request.session["preview_finalized"] = True
+
+        return redirect("computation_home")  # ETo / PET / SPEI landing page
+   
+
+class SaveUpdatedDataView(View):
+
+    def post(self, request):
+        merged_json = request.session.get("merged_df")
         station_map = request.session.get("station_map", {})
 
-        for key, value in request.POST.items():
-            if key.startswith("stationname_"):
-                idx = key.split("_")[-1]
-                station = value.strip().lower()
-                sid = request.POST.get(f"stationid_{idx}")
+        if not merged_json:
+            messages.error(request, "Session expired. Please re-upload files.")
+            return redirect("home")
 
-                if sid:
-                    station_map[station] = sid.strip()
+        df = pd.read_json(merged_json, orient="records")
 
-        request.session["station_map"] = station_map
-        request.session["missing_stationids"] = []
+        # Normalize station names
+        df["station_name_norm"] = (
+            df["station_name"]
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
 
-        messages.success(request, "Station IDs saved successfully.")
+        df["stationid"] = df["station_name_norm"].map(station_map)
 
-        return redirect("preview")'''
+        df.drop(columns=["station_name_norm"], inplace=True)
+
+        response = HttpResponse(
+            content_type="text/csv"
+        )
+        response["Content-Disposition"] = (
+            'attachment; filename="climate_data_with_stationids.csv"'
+        )
+
+        df.to_csv(response, index=False)
+
+        return response
+class ComputationHomeView(View):
+    template_name = "frontend/computation_home.html"
+
+    def get(self, request):
+        # Ensure there is a finalized preview
+        if not request.session.get("climate_preview"):
+            messages.error(request, "No uploaded data found. Please upload files first.")
+            return redirect("home")
+        return render(request, self.template_name)
+from climate_core.eto.fao56 import FAO56ETo
+
+class ComputeEToView(View):
+    def post(self, request):
+        merged_json = request.session.get("merged_df")
+
+        if not merged_json:
+            messages.error(request, "No uploaded data found.")
+            return redirect("home")
+
+        df = pd.read_json(merged_json, orient="records")
+
+        # Apply station IDs
+        station_map = request.session.get("station_map", {})
+        df["station_name_norm"] = df["station_name"].astype(str).str.strip().str.lower()
+        df["stationid"] = df["station_name_norm"].map(station_map)
+        df.drop(columns=["station_name_norm"], inplace=True)
+
+        # Compute ETo
+        eto_calculator = FAO56ETo(df)
+        df["ETo"] = eto_calculator.compute()
+
+        # Save results in session for next steps
+        request.session["computed_eto"] = df.to_json(orient="records")
+
+        messages.success(request, "ETo computation completed successfully.")
+        return redirect("computation_results")  # new template to show ETo results

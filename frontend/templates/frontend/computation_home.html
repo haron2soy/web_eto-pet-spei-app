@@ -1,0 +1,27 @@
+{% extends 'frontend/home.html' %}
+
+{% block content %}
+<div class="container">
+    <div class="card">
+        <div class="card-header">
+            Select Computation
+        </div>
+        <div class="card-body" style="display:flex; gap:1rem;">
+            <form method="post" action="{% url 'compute_eto' %}">
+                {% csrf_token %}
+                <button class="btn btn-primary" type="submit">ETo</button>
+            </form>
+
+            <form method="post" action="{% url 'compute_pet' %}">
+                {% csrf_token %}
+                <button class="btn btn-primary" type="submit">PET</button>
+            </form>
+
+            <form method="post" action="{% url 'compute_spei' %}">
+                {% csrf_token %}
+                <button class="btn btn-primary" type="submit">SPEI</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
